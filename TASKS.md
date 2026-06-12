@@ -80,12 +80,15 @@ table instead (renders reliably; still structured + screen-reader friendly).
 
 ## Phase 4 — Ship (Sun Eve)
 
-- [ ] `README.md` — problem, value-first; setup/run; mirror Splunk vocabulary; note local
+- [x] `README.md` — problem, value-first; setup/run; mirror Splunk vocabulary; note local
       Foundation-Sec (not hosted) + MCP usage; cross-reference AgentReady if built
-- [ ] `LICENSE` (MIT), visible in repo About
-- [ ] Record demo video ≤3 min (script in SPEC §8); no copyrighted music
-- [ ] Final pass on `architecture_diagram.md` at repo root
+- [x] `LICENSE` (MIT), visible in repo About
+- [ ] Record demo video ≤3 min (shot list in `DEMO_SCRIPT.md`); no copyrighted music
+- [x] Final pass on `architecture_diagram.md` at repo root (SAIA-fallback honesty note added)
 - [ ] Push public repo; verify a stranger could run it from the README
+      (git repo initialized, initial commit `3bba7b1` — create the GitHub repo and push;
+      also fixed for strangers: `mcp` added to requirements.txt, deploy creds + real
+      Ollama model tag added to `.env.example`, `SPEC (2).md` renamed to `SPEC.md`)
 
 **Gate 4 (Sun night):** repo public, video uploaded, all required artifacts present.
 
