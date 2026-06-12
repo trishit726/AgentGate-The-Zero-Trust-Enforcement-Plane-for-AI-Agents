@@ -105,9 +105,14 @@ table instead (renders reliably; still structured + screen-reader friendly).
 
 ## If ahead of schedule (optional, do NOT bloat scope)
 
-- [ ] **Tokenomics panel:** add per-identity request counts + Sentinel token usage as one
+- [x] **Tokenomics panel:** add per-identity request counts + Sentinel token usage as one
       dashboard panel → lets you say "tokenomics" / "AI observing AI with its own cost meter".
       ≤2 hrs, Sunday polish window only.
+      ✅ Done (Jun 13): Sentinel now meters its own inference (tokens_prompt/completion/total,
+      inference_ms from Ollama) into every report; full-width 💰 Tokenomics panel joins
+      per-identity requests/denials with investigations + LLM token cost. Verified live
+      (checkout-bot: 467 tokens, 18.3 s avg triage). NOTE: restart the broker so it picks up
+      the new sentinel code — older reports lack token fields (sum just skips them).
 - [ ] **AgentReady** (separate submission, Platform track + Developer Tools bonus): only start
       if Gate 3 passed by Sun midday. Scope it brutally — AppInspect CLI wrapper + 5–6
       agent-readiness checks + LLM auto-fix on the SAME Ollama + a generated static HTML report

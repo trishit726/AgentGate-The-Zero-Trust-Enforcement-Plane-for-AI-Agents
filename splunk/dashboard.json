@@ -91,6 +91,15 @@
                 "refreshType": "delay"
             }
         },
+        "ds_tokenomics": {
+            "type": "ds.search",
+            "name": "Tokenomics per identity",
+            "options": {
+                "query": "index=agentgate | eval agent_id=mvdedup('params.agent_id'), decision=mvdedup('params.decision') | stats count AS requests, count(eval(decision=\"DENY\")) AS denials BY agent_id | join type=left agent_id [search index=agentgate_investigations | eval agent_id=mvdedup(agent_id), tokens_total=tonumber(mvdedup(tokens_total)), inference_ms=tonumber(mvdedup(inference_ms)) | stats count AS investigations, sum(tokens_total) AS sentinel_llm_tokens, avg(inference_ms) AS avg_inference_ms BY agent_id] | eval avg_triage_sec=round(avg_inference_ms/1000,1) | fields - avg_inference_ms | fillnull value=0 investigations sentinel_llm_tokens avg_triage_sec | sort - sentinel_llm_tokens",
+                "refresh": "30s",
+                "refreshType": "delay"
+            }
+        },
         "ds_investigation_kv": {
             "type": "ds.chain",
             "name": "Latest investigation (field/value)",
@@ -152,6 +161,13 @@
             "title": "🛡️ Latest Sentinel investigation — auto-triage of the most recent denial",
             "dataSources": {
                 "primary": "ds_investigation_kv"
+            }
+        },
+        "viz_tokenomics": {
+            "type": "splunk.table",
+            "title": "💰 Tokenomics — AI observing AI: per-identity traffic vs. Sentinel's own LLM cost",
+            "dataSources": {
+                "primary": "ds_tokenomics"
             }
         }
     },
@@ -230,6 +246,16 @@
                     "y": 420,
                     "w": 720,
                     "h": 400
+                }
+            },
+            {
+                "item": "viz_tokenomics",
+                "type": "block",
+                "position": {
+                    "x": 0,
+                    "y": 820,
+                    "w": 1200,
+                    "h": 180
                 }
             }
         ]

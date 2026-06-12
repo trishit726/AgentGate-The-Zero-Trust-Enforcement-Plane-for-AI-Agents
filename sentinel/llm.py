@@ -60,8 +60,13 @@ class LLMUnavailable(Exception):
     """Ollama unreachable, model missing, timeout, or unparseable output."""
 
 
-def triage(deny_event: dict, context_rows: list[dict]) -> dict:
-    """Run Foundation-Sec over the incident. Returns the §4.3 narrative fields."""
+def triage(deny_event: dict, context_rows: list[dict]) -> tuple[dict, dict]:
+    """Run Foundation-Sec over the incident.
+
+    Returns (narrative, usage): the §4.3 narrative fields plus the tokenomics of this
+    inference (prompt/completion token counts and wall time from Ollama) — Sentinel
+    meters its own cost so the dashboard can show AI observing AI.
+    """
     params = deny_event.get("params", {})
     user_msg = json.dumps(
         {
@@ -87,7 +92,8 @@ def triage(deny_event: dict, context_rows: list[dict]) -> dict:
             timeout=_TIMEOUT_S,
         )
         resp.raise_for_status()
-        content = resp.json()["message"]["content"]
+        data = resp.json()
+        content = data["message"]["content"]
         report = _extract_json(content)
     except Exception as exc:  # noqa: BLE001 — single failure contract for the caller
         raise LLMUnavailable(f"Foundation-Sec triage failed: {exc}") from exc
@@ -95,4 +101,13 @@ def triage(deny_event: dict, context_rows: list[dict]) -> dict:
     missing = [k for k in _REQUIRED_KEYS if k not in report]
     if missing:
         raise LLMUnavailable(f"triage output missing keys: {missing}")
-    return {k: report[k] for k in _REQUIRED_KEYS}
+
+    tokens_prompt = int(data.get("prompt_eval_count", 0))
+    tokens_completion = int(data.get("eval_count", 0))
+    usage = {
+        "tokens_prompt": tokens_prompt,
+        "tokens_completion": tokens_completion,
+        "tokens_total": tokens_prompt + tokens_completion,
+        "inference_ms": int(data.get("total_duration", 0) / 1_000_000),
+    }
+    return {k: report[k] for k in _REQUIRED_KEYS}, usage

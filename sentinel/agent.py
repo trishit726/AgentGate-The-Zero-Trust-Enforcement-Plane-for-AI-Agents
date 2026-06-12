@@ -89,11 +89,12 @@ def investigate(event: dict) -> None:
 
         model_used = llm._MODEL
         try:
-            narrative = llm.triage(event, rows)
+            narrative, usage = llm.triage(event, rows)
         except llm.LLMUnavailable as exc:
             log.warning("sentinel: LLM unavailable, writing stub narrative: %s", exc)
             narrative = _stub_narrative(params)
             model_used = "stub (model offline)"
+            usage = {"tokens_prompt": 0, "tokens_completion": 0, "tokens_total": 0, "inference_ms": 0}
 
         report = {
             "incident_id": incident_id,
@@ -108,6 +109,7 @@ def investigate(event: dict) -> None:
             "context_rows": len(rows),
             "spl_used": spl_used[:500],
             "generated_at": datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            **usage,
         }
         emit.emit_decision(report, index="agentgate_investigations")
         log.info(
