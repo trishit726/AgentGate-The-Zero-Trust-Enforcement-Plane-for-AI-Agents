@@ -1,0 +1,237 @@
+{
+    "title": "AgentGate Control",
+    "description": "Zero-Trust Enforcement Plane for AI Agents — live decisions, agent identities, denial timeline, and Sentinel investigations.",
+    "inputs": {
+        "input_global_trp": {
+            "type": "input.timerange",
+            "title": "Time range",
+            "options": {
+                "token": "global_time",
+                "defaultValue": "-60m@m,now"
+            }
+        }
+    },
+    "defaults": {
+        "dataSources": {
+            "ds.search": {
+                "options": {
+                    "queryParameters": {
+                        "earliest": "$global_time.earliest$",
+                        "latest": "$global_time.latest$"
+                    }
+                }
+            }
+        }
+    },
+    "dataSources": {
+        "ds_kpi_allow": {
+            "type": "ds.search",
+            "name": "Allowed decisions",
+            "options": {
+                "query": "index=agentgate \"params.decision\"=ALLOW | stats count",
+                "refresh": "10s",
+                "refreshType": "delay"
+            }
+        },
+        "ds_kpi_deny": {
+            "type": "ds.search",
+            "name": "Denied decisions",
+            "options": {
+                "query": "index=agentgate \"params.decision\"=DENY | stats count",
+                "refresh": "10s",
+                "refreshType": "delay"
+            }
+        },
+        "ds_kpi_agents": {
+            "type": "ds.search",
+            "name": "Active agent identities",
+            "options": {
+                "query": "index=agentgate | eval agent_id=mvdedup('params.agent_id') | stats dc(agent_id) AS count",
+                "refresh": "10s",
+                "refreshType": "delay"
+            }
+        },
+        "ds_live_feed": {
+            "type": "ds.search",
+            "name": "Live decision feed",
+            "options": {
+                "query": "index=agentgate | eval agent_id=mvdedup('params.agent_id'), target_service=mvdedup('params.target_service'), decision=mvdedup('params.decision'), reason=mvdedup('params.reason'), src_ip=mvdedup('params.src_ip') | eval status=if(decision=\"DENY\", \"⛔ DENY\", \"✅ ALLOW\") | sort - _time | head 25 | table _time, status, agent_id, target_service, reason, src_ip",
+                "refresh": "10s",
+                "refreshType": "delay"
+            }
+        },
+        "ds_identity_map": {
+            "type": "ds.search",
+            "name": "Agent identity map",
+            "options": {
+                "query": "index=agentgate | eval agent_id=mvdedup('params.agent_id'), decision=mvdedup('params.decision'), scope=mvjoin(mvdedup('params.token_scope{}'), \", \") | stats count(eval(decision=\"ALLOW\")) AS allowed, count(eval(decision=\"DENY\")) AS denied, latest(scope) AS token_scope BY agent_id | sort - denied",
+                "refresh": "30s",
+                "refreshType": "delay"
+            }
+        },
+        "ds_denial_timeline": {
+            "type": "ds.search",
+            "name": "Denial timeline",
+            "options": {
+                "query": "index=agentgate \"params.decision\"=DENY | timechart span=1m count AS denials",
+                "refresh": "10s",
+                "refreshType": "delay"
+            }
+        },
+        "ds_investigation": {
+            "type": "ds.search",
+            "name": "Latest Sentinel investigation",
+            "options": {
+                "query": "index=agentgate_investigations | sort - _time | head 1 | eval incident_id=mvdedup(incident_id), agent_id=mvdedup(agent_id), target_service=mvdedup(target_service), probable_cause=mvdedup(probable_cause), blast_radius=mvdedup(blast_radius), evidence=mvdedup(evidence), recommended_action=mvdedup(recommended_action), model=mvdedup(model), context_source=mvdedup(context_source), context_rows=mvdedup(context_rows), generated_at=mvdedup(generated_at) | table incident_id, probable_cause, agent_id, target_service, blast_radius, evidence, recommended_action, model, context_source, context_rows, generated_at",
+                "queryParameters": {
+                    "earliest": "-24h@h",
+                    "latest": "now"
+                },
+                "refresh": "10s",
+                "refreshType": "delay"
+            }
+        },
+        "ds_investigation_kv": {
+            "type": "ds.chain",
+            "name": "Latest investigation (field/value)",
+            "options": {
+                "extend": "ds_investigation",
+                "query": "| rename incident_id AS \"Incident\", probable_cause AS \"Probable cause\", agent_id AS \"Agent\", target_service AS \"Attempted target\", blast_radius AS \"Blast radius\", evidence AS \"Evidence\", recommended_action AS \"Recommended action\", model AS \"Model\", context_source AS \"Context source\", context_rows AS \"Context rows (via MCP)\", generated_at AS \"Generated at\" | transpose | rename column AS \"Field\", \"row 1\" AS \"Sentinel triage\""
+            }
+        }
+    },
+    "visualizations": {
+        "viz_kpi_allow": {
+            "type": "splunk.singlevalue",
+            "title": "✅ Allowed (window)",
+            "dataSources": {
+                "primary": "ds_kpi_allow"
+            }
+        },
+        "viz_kpi_deny": {
+            "type": "splunk.singlevalue",
+            "title": "⛔ Denied (window)",
+            "dataSources": {
+                "primary": "ds_kpi_deny"
+            }
+        },
+        "viz_kpi_agents": {
+            "type": "splunk.singlevalue",
+            "title": "🪪 Agent identities seen",
+            "dataSources": {
+                "primary": "ds_kpi_agents"
+            }
+        },
+        "viz_live_feed": {
+            "type": "splunk.table",
+            "title": "Live decision feed — every request, allowed or refused",
+            "dataSources": {
+                "primary": "ds_live_feed"
+            }
+        },
+        "viz_identity_map": {
+            "type": "splunk.table",
+            "title": "Agent identity map — scope and decision counts per identity",
+            "dataSources": {
+                "primary": "ds_identity_map"
+            }
+        },
+        "viz_denial_timeline": {
+            "type": "splunk.column",
+            "title": "Denial timeline — a spike is an incident",
+            "dataSources": {
+                "primary": "ds_denial_timeline"
+            },
+            "options": {
+                "yAxisTitleText": "denials / min",
+                "xAxisTitleText": "time"
+            }
+        },
+        "viz_investigation": {
+            "type": "splunk.table",
+            "title": "🛡️ Latest Sentinel investigation — auto-triage of the most recent denial",
+            "dataSources": {
+                "primary": "ds_investigation_kv"
+            }
+        }
+    },
+    "layout": {
+        "type": "grid",
+        "options": {},
+        "globalInputs": [
+            "input_global_trp"
+        ],
+        "structure": [
+            {
+                "item": "viz_kpi_allow",
+                "type": "block",
+                "position": {
+                    "x": 0,
+                    "y": 0,
+                    "w": 400,
+                    "h": 120
+                }
+            },
+            {
+                "item": "viz_kpi_deny",
+                "type": "block",
+                "position": {
+                    "x": 400,
+                    "y": 0,
+                    "w": 400,
+                    "h": 120
+                }
+            },
+            {
+                "item": "viz_kpi_agents",
+                "type": "block",
+                "position": {
+                    "x": 800,
+                    "y": 0,
+                    "w": 400,
+                    "h": 120
+                }
+            },
+            {
+                "item": "viz_live_feed",
+                "type": "block",
+                "position": {
+                    "x": 0,
+                    "y": 120,
+                    "w": 720,
+                    "h": 300
+                }
+            },
+            {
+                "item": "viz_identity_map",
+                "type": "block",
+                "position": {
+                    "x": 720,
+                    "y": 120,
+                    "w": 480,
+                    "h": 300
+                }
+            },
+            {
+                "item": "viz_denial_timeline",
+                "type": "block",
+                "position": {
+                    "x": 0,
+                    "y": 420,
+                    "w": 480,
+                    "h": 400
+                }
+            },
+            {
+                "item": "viz_investigation",
+                "type": "block",
+                "position": {
+                    "x": 480,
+                    "y": 420,
+                    "w": 720,
+                    "h": 400
+                }
+            }
+        ]
+    }
+}
